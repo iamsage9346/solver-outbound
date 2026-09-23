@@ -48,7 +48,7 @@ export const DEFAULT_SETTINGS = {
     domainIntervalMs: 2000,
     maxPages: 30,
     maxDepth: 2,
-    parallelDomains: 10, // 도메인 간 병렬. 도메인당 간격 2초는 유지
+    parallelDomains: 20, // 도메인 간 병렬. 도메인당 간격 2초는 유지
     userAgent: "SolverOutreachBot/0.1 (+https://solver.kr; outreach@solver.kr)",
     htmlRetentionDays: 30,
     recrawlDays: 60,
