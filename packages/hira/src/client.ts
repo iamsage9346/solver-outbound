@@ -83,9 +83,16 @@ export class HiraClient {
       .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
       .join("&");
     const full = `${u.origin}${u.pathname}?serviceKey=${key}&${qs}`;
-    const res = await this.fetchImpl(full, { headers: { accept: "application/json, application/xml" } });
-    const text = await res.text();
-    if (!res.ok) throw new Error(`HIRA ${res.status}: ${text.slice(0, 200)}`);
+    // data.go.kr은 간헐적으로 503/타임아웃(returnReasonCode 05)을 내므로 3회까지 재시도한다.
+    let text = "";
+    for (let attempt = 1; ; attempt++) {
+      const res = await this.fetchImpl(full, { headers: { accept: "application/json, application/xml" } }).catch((e) => ({ ok: false, status: 0, text: async () => String(e) }));
+      text = await res.text();
+      const transient = !res.ok || /SERVICETIMEOUT_ERROR|"returnReasonCode":\s*"0[45]"/.test(text);
+      if (!transient) break;
+      if (attempt >= 3) throw new Error(`HIRA ${res.status}: ${text.slice(0, 200)}`);
+      await sleep(1500 * attempt);
+    }
     let body: any;
     try {
       body = JSON.parse(text);
