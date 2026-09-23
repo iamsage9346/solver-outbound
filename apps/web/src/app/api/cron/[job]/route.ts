@@ -8,8 +8,8 @@ export const dynamic = "force-dynamic";
 
 /**
  * Vercel Cron / 외부 스케줄러용 잡 엔드포인트. apps/worker(pg-boss)와 같은 파이프라인 함수를 호출한다.
- * Hobby 플랜은 크론이 하루 1회·2개라 vercel.json에는 daily(09:00 KST)와 send-slot(10:00 KST)만 등록하고,
- * 60초 Gmail 폴링은 로컬/VPS 워커 또는 외부 스케줄러가 `poll-gmail`을 호출한다.
+ * vercel.json 크론(UTC): poll-gmail 매분, daily 09:00 KST, send-slot 화·수·목 10:00 KST, digest-open 10:30·16:00 KST.
+ * Vercel Cron은 Authorization: Bearer CRON_SECRET 헤더를 자동으로 붙인다.
  */
 export async function GET(req: Request, { params }: RouteContext<"/api/cron/[job]">) {
   const secret = process.env.CRON_SECRET;

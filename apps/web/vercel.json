@@ -1,7 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
+    { "path": "/api/cron/poll-gmail", "schedule": "* * * * *" },
     { "path": "/api/cron/daily", "schedule": "0 0 * * *" },
-    { "path": "/api/cron/send-slot", "schedule": "0 1 * * *" }
+    { "path": "/api/cron/send-slot", "schedule": "0 1 * * 2,3,4" },
+    { "path": "/api/cron/digest-open", "schedule": "30 1,7 * * *" }
   ]
 }
