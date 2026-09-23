@@ -13,9 +13,12 @@ export default async function ReportLanding({ params }: PageProps<"/report/[toke
   const { token } = await params;
   const audit = await db.query.audits.findFirst({ where: eq(audits.landingToken, token) });
   if (!audit) notFound();
-  const json = await readFile(join(process.cwd(), "..", "..", "storage", "reports", `${token}.json`), "utf8").catch(() => null);
-  if (!json) notFound();
-  const data = JSON.parse(json) as ReportData;
+  let data = audit.reportData as ReportData | null;
+  if (!data) {
+    const json = await readFile(join(process.cwd(), "..", "..", "storage", "reports", `${token}.json`), "utf8").catch(() => null);
+    if (!json) notFound();
+    data = JSON.parse(json) as ReportData;
+  }
   return (
     <div className="min-h-screen bg-canvas py-8">
       <div className="mx-auto w-fit max-w-full overflow-auto border bg-white">

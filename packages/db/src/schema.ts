@@ -187,6 +187,7 @@ export const audits = pgTable(
     scores: jsonb("scores").$type<{ place: number | null; site: number | null; geo: number | null }>(),
     topFixes: text("top_fixes").array().notNull().default([]),
     reportPdfPath: text("report_pdf_path"),
+    reportData: jsonb("report_data").$type<Record<string, unknown> | null>(), // 리포트 렌더 입력 (Vercel 등 읽기 전용 FS 대비)
     landingToken: text("landing_token").unique(),
     bannedTerms: text("banned_terms").array().notNull().default([]),
     approvedBy: text("approved_by"),

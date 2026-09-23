@@ -127,6 +127,7 @@ export async function auditLead(ctx: PipelineContext, lead: Lead, opts: { place?
       topFixes,
       landingToken,
       bannedTerms: banned,
+      reportData: data as unknown as Record<string, unknown>,
     })
     .returning();
   if (!audit) throw new Error("audit insert failed");
@@ -137,17 +138,21 @@ export async function auditLead(ctx: PipelineContext, lead: Lead, opts: { place?
     }
   }
 
-  // 리포트 파일 (storage/reports/<token>.html|.pdf)
-  const dir = join(process.cwd(), "storage", "reports");
-  await mkdir(dir, { recursive: true });
-  const html = await reportToHtml(data, { standalone: true });
-  await writeFile(join(dir, `${landingToken}.html`), html);
-  await writeFile(join(dir, `${landingToken}.json`), JSON.stringify(data, null, 2));
+  // 리포트 파일 (storage/reports/<token>.html|.pdf). 서버리스(읽기 전용 FS)에서는 건너뛰고 DB의 reportData만 쓴다.
   let pdfPath: string | null = null;
-  const pdf = await reportToPdf(html).catch(() => null);
-  if (pdf) {
-    pdfPath = join(dir, `${landingToken}.pdf`);
-    await writeFile(pdfPath, pdf);
+  try {
+    const dir = join(process.env.REPORT_DIR ?? join(process.cwd(), "storage"), "reports");
+    await mkdir(dir, { recursive: true });
+    const html = await reportToHtml(data, { standalone: true });
+    await writeFile(join(dir, `${landingToken}.html`), html);
+    await writeFile(join(dir, `${landingToken}.json`), JSON.stringify(data, null, 2));
+    const pdf = await reportToPdf(html).catch(() => null);
+    if (pdf) {
+      pdfPath = join(dir, `${landingToken}.pdf`);
+      await writeFile(pdfPath, pdf);
+    }
+  } catch (e) {
+    ctx.log(lead.id, `리포트 파일 저장 건너뜀: ${(e as Error).message}`);
   }
   await ctx.db.update(audits).set({ reportPdfPath: pdfPath }).where(eq(audits.id, audit.id));
   await ctx.db.update(leads).set({ status: lead.status === "listed" ? "audited" : lead.status, geoScore: scores.geo, placeRank: place?.keywords[0]?.rank ?? lead.placeRank, reviewCnt: place?.reviewCnt ?? lead.reviewCnt }).where(eq(leads.id, lead.id));

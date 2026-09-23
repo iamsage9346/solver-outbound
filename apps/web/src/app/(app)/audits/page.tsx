@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { Report, type ReportData } from "@solver/report";
 import { Toolbar, ThreePane, PanelTitle } from "@/components/shell/page";
 import { AuditActions, DeviceToggle } from "@/components/audits/actions";
 import { listAudits } from "@/lib/queries";
@@ -14,10 +13,7 @@ export default async function AuditsPage({ searchParams }: PageProps<"/audits">)
   const rows = await listAudits();
   const selId = typeof sp.a === "string" ? sp.a : rows[0]?.audit.id;
   const sel = rows.find((r) => r.audit.id === selId) ?? null;
-  let html: string | null = null;
-  if (sel?.audit.landingToken) {
-    html = await readFile(join(process.cwd(), "..", "..", "storage", "reports", `${sel.audit.landingToken}.html`), "utf8").catch(() => null);
-  }
+  const data = (sel?.audit.reportData as ReportData | null) ?? null;
   const approved = rows.filter((r) => r.audit.approvedAt).length;
 
   return (
@@ -44,7 +40,7 @@ export default async function AuditsPage({ searchParams }: PageProps<"/audits">)
             ))}
           </div>
         }
-        center={html ? <DeviceToggle><iframe srcDoc={html} className="block h-[1180px] w-full" title="리포트 미리보기" /></DeviceToggle> : <div className="flex h-full items-center justify-center text-[13px] text-muted-foreground">리포트를 선택하세요.</div>}
+        center={data ? <DeviceToggle><Report d={data} /></DeviceToggle> : <div className="flex h-full items-center justify-center text-[13px] text-muted-foreground">리포트를 선택하세요. 이전 버전 진단은 재실행하면 미리보기가 생깁니다.</div>}
         right={sel ? <AuditActions auditId={sel.audit.id} leadId={sel.lead.id} approved={!!sel.audit.approvedAt} banned={sel.audit.bannedTerms} topFixes={sel.audit.topFixes} /> : undefined}
       />
     </>
