@@ -1,6 +1,6 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, isNotNull, sql } from "drizzle-orm";
 import { contacts, crawlResults, leads, type Lead } from "@solver/db";
-import { crawlSite } from "@solver/crawler";
+import { crawlSite, guessHomepageFromNaver } from "@solver/crawler";
 import { summarizeSite } from "@solver/llm";
 import { estimateStaff } from "@solver/hira";
 import type { PipelineContext } from "./context";
@@ -17,13 +17,26 @@ export interface CrawlOneResult {
 /** PRD 5절: 홈페이지 크롤 → contacts/crawl_results 갱신. 멱등(같은 URL 재크롤은 최신 레코드로 갱신). */
 export async function crawlLead(ctx: PipelineContext, lead: Lead): Promise<CrawlOneResult> {
   const base: CrawlOneResult = { leadId: lead.id, emails: 0, forms: 0, errorCode: null, harvestRefusal: false, phoneFirst: false };
-  if (!lead.homepage) {
+  let homepage = lead.homepage;
+  if (!homepage && !ctx.dryRun) {
+    // 심평원에 없으면 네이버 지역검색으로 공식 홈페이지를 찾는다 (자동 발견 태그)
+    const guess = await guessHomepageFromNaver(lead.name, lead.address).catch((e) => {
+      ctx.log(lead.id, `홈페이지 탐색 실패: ${(e as Error).message}`);
+      return null;
+    });
+    if (guess) {
+      homepage = guess.url;
+      await ctx.db.update(leads).set({ homepage, homepageAutoFound: true }).where(eq(leads.id, lead.id));
+      ctx.log(lead.id, `홈페이지 자동 발견 ${homepage} (${guess.matchedName})`);
+    }
+  }
+  if (!homepage) {
     await ctx.db.update(leads).set({ phoneFirst: true }).where(eq(leads.id, lead.id));
     ctx.log(lead.id, "홈페이지 없음 → 전화 우선");
     return { ...base, phoneFirst: true };
   }
 
-  const out = await crawlSite(lead.homepage, { dryRun: ctx.dryRun, intervalMs: ctx.settings.crawl.domainIntervalMs, maxPages: ctx.settings.crawl.maxPages, maxDepth: ctx.settings.crawl.maxDepth });
+  const out = await crawlSite(homepage, { dryRun: ctx.dryRun, intervalMs: ctx.settings.crawl.domainIntervalMs, maxPages: ctx.settings.crawl.maxPages, maxDepth: ctx.settings.crawl.maxDepth });
 
   let summary: string | null = null;
   if (out.text.length > 200) {
@@ -36,7 +49,7 @@ export async function crawlLead(ctx: PipelineContext, lead: Lead): Promise<Crawl
 
   await ctx.db.insert(crawlResults).values({
     leadId: lead.id,
-    url: out.finalUrl || lead.homepage,
+    url: out.finalUrl || homepage,
     statusCode: out.statusCode,
     renderMode: out.renderMode,
     pagesVisited: out.pagesVisited,
@@ -100,14 +113,28 @@ export async function runCrawlBatch(ctx: PipelineContext, opts: { leadIds?: stri
   if (opts.leadIds?.length) {
     targets = await ctx.db.query.leads.findMany({ where: (l, { inArray }) => inArray(l.id, opts.leadIds!) });
   } else {
+    const canDiscover = !!process.env.NAVER_CLIENT_ID && !!process.env.NAVER_CLIENT_SECRET;
+    // 네이버 탐색이 불가능하면 홈페이지 없는 리드는 크롤 없이 "전화 우선"만 표시 (재선택 방지)
+    if (!canDiscover) {
+      await ctx.db
+        .update(leads)
+        .set({ phoneFirst: true })
+        .where(and(isNull(leads.homepage), eq(leads.phoneFirst, false), sql`not exists (select 1 from ${contacts} c where c.lead_id = ${leads.id} and c.type = 'email')`));
+    }
+    // 대상: 크롤 기록이 없고, 홈페이지가 있거나(탐색 가능 시) 아직 탐색 안 한(phoneFirst=false) 리드
     const rows = await ctx.db
       .select({ lead: leads })
       .from(leads)
-      .leftJoin(crawlResults, eq(crawlResults.leadId, leads.id))
-      .where(opts.force ? undefined : isNull(crawlResults.id))
+      .where(
+        and(
+          canDiscover ? sql`(${leads.homepage} is not null or ${leads.phoneFirst} = false)` : isNotNull(leads.homepage),
+          sql`${leads.tier} is distinct from 'EXCLUDED'`,
+          opts.force ? sql`true` : sql`not exists (select 1 from ${crawlResults} cr where cr.lead_id = ${leads.id})`,
+        ),
+      )
+      .orderBy(leads.createdAt)
       .limit(opts.limit ?? 50);
-    const seen = new Set<string>();
-    targets = rows.map((r) => r.lead).filter((l) => l.tier !== "EXCLUDED" && !seen.has(l.id) && seen.add(l.id));
+    targets = rows.map((r) => r.lead);
   }
   const results: CrawlOneResult[] = [];
   const parallel = ctx.settings.crawl.parallelDomains;
