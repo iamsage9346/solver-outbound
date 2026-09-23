@@ -36,7 +36,19 @@ export async function crawlLead(ctx: PipelineContext, lead: Lead): Promise<Crawl
     return { ...base, phoneFirst: true };
   }
 
-  const out = await crawlSite(homepage, { dryRun: ctx.dryRun, intervalMs: ctx.settings.crawl.domainIntervalMs, maxPages: ctx.settings.crawl.maxPages, maxDepth: ctx.settings.crawl.maxDepth });
+  // 사이트 하나가 전체를 붙잡지 않도록 사이트당 하드 타임아웃 (30페이지 × 2초 + 여유)
+  const siteTimeoutMs = ctx.settings.crawl.maxPages * (ctx.settings.crawl.domainIntervalMs + 3_000) + 30_000;
+  const out = await Promise.race([
+    crawlSite(homepage, { dryRun: ctx.dryRun, intervalMs: ctx.settings.crawl.domainIntervalMs, maxPages: ctx.settings.crawl.maxPages, maxDepth: ctx.settings.crawl.maxDepth }),
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`SITE_TIMEOUT ${siteTimeoutMs}ms`)), siteTimeoutMs)),
+  ]).catch((e) => {
+    ctx.log(lead.id, `크롤 중단: ${(e as Error).message}`);
+    return null;
+  });
+  if (!out) {
+    await ctx.db.insert(crawlResults).values({ leadId: lead.id, url: homepage, statusCode: null, renderMode: "static", pagesVisited: 0, errorCode: "TIMEOUT" });
+    return { ...base, errorCode: "TIMEOUT", phoneFirst: !(await hasEmail(ctx, lead.id)) };
+  }
 
   let summary: string | null = null;
   if (out.text.length > 200) {
@@ -91,12 +103,7 @@ export async function crawlLead(ctx: PipelineContext, lead: Lead): Promise<Crawl
     await ctx.db.insert(contacts).values({ leadId: lead.id, type: "person", value: out.representative, role: "representative", source: "crawl", confidence: 0.6 }).onConflictDoNothing();
   }
 
-  const [emailRow] = await ctx.db
-    .select({ id: contacts.id })
-    .from(contacts)
-    .where(and(eq(contacts.leadId, lead.id), eq(contacts.type, "email")))
-    .limit(1);
-  const phoneFirst = !emailRow;
+  const phoneFirst = !(await hasEmail(ctx, lead.id));
   await ctx.db
     .update(leads)
     .set({ phoneFirst, emailManualCheck: out.harvestRefusal, staffEst: estimateStaff(lead.doctorCnt, out.services) })
@@ -107,7 +114,12 @@ export async function crawlLead(ctx: PipelineContext, lead: Lead): Promise<Crawl
   return r;
 }
 
-/** 배치: 아직 크롤 안 된(또는 강제) 리드를 병렬 도메인 5개로 돈다 */
+async function hasEmail(ctx: PipelineContext, leadId: string): Promise<boolean> {
+  const [row] = await ctx.db.select({ id: contacts.id }).from(contacts).where(and(eq(contacts.leadId, leadId), eq(contacts.type, "email"))).limit(1);
+  return !!row;
+}
+
+/** 배치: 아직 크롤 안 된(또는 강제) 리드를 워커 풀로 돈다 (느린 사이트가 다른 사이트를 막지 않음) */
 export async function runCrawlBatch(ctx: PipelineContext, opts: { leadIds?: string[]; limit?: number; force?: boolean } = {}) {
   let targets: Lead[];
   if (opts.leadIds?.length) {
@@ -138,10 +150,15 @@ export async function runCrawlBatch(ctx: PipelineContext, opts: { leadIds?: stri
   }
   const results: CrawlOneResult[] = [];
   const parallel = ctx.settings.crawl.parallelDomains;
-  for (let i = 0; i < targets.length; i += parallel) {
-    const chunk = targets.slice(i, i + parallel);
-    results.push(...(await Promise.all(chunk.map((l) => crawlLead(ctx, l).catch((e) => ({ leadId: l.id, emails: 0, forms: 0, errorCode: `EXC:${(e as Error).message.slice(0, 40)}`, harvestRefusal: false, phoneFirst: true }))))));
-  }
+  let next = 0;
+  const worker = async () => {
+    while (next < targets.length) {
+      const l = targets[next++]!;
+      results.push(await crawlLead(ctx, l).catch((e) => ({ leadId: l.id, emails: 0, forms: 0, errorCode: `EXC:${(e as Error).message.slice(0, 40)}`, harvestRefusal: false, phoneFirst: true })));
+      if (results.length % 50 === 0) ctx.log(null, `크롤 진행 ${results.length}/${targets.length}`);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(parallel, targets.length) }, worker));
   const summary = {
     total: results.length,
     withEmail: results.filter((r) => r.emails > 0).length,

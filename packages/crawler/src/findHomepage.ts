@@ -25,7 +25,7 @@ export async function guessHomepageFromNaver(name: string, address: string | nul
   const region = address?.split(/\s+/).slice(1, 3).join(" ") ?? "";
   const queries = [`${region} ${name}`.trim(), name];
   for (const q of queries) {
-    const res = await f(`https://openapi.naver.com/v1/search/local.json?query=${encodeURIComponent(q)}&display=5`, { headers: { "X-Naver-Client-Id": id, "X-Naver-Client-Secret": secret } });
+    const res = await f(`https://openapi.naver.com/v1/search/local.json?query=${encodeURIComponent(q)}&display=5`, { headers: { "X-Naver-Client-Id": id, "X-Naver-Client-Secret": secret }, signal: AbortSignal.timeout(10_000) });
     if (!res.ok) {
       if (res.status === 429) throw new Error("NAVER_RATE_LIMIT");
       if (res.status === 401 || res.status === 403) throw new Error(`NAVER_AUTH ${res.status}: ${(await res.text()).slice(0, 120)}`);

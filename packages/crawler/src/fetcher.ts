@@ -65,7 +65,17 @@ export function resetCaches() {
   lastHit.clear();
 }
 
-export const fetchPage: FetchImpl = async (url) => {
+/** 헤더뿐 아니라 본문 수신까지 포함한 하드 타임아웃. 느리게 흘려보내는 서버에 소켓이 붙잡히지 않게 한다. */
+function withHardTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(Object.assign(new Error(`hard timeout after ${ms}ms`), { name: "TimeoutError" })), ms);
+    p.then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
+  });
+}
+
+export const fetchPage: FetchImpl = (url) => withHardTimeout(fetchPageInner(url), TIMEOUT_MS + 5_000);
+
+const fetchPageInner: FetchImpl = async (url) => {
   const started = Date.now();
   try {
     const res = await undiciFetch(url, {
