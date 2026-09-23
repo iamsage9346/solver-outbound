@@ -10,3 +10,5 @@ out
 tsconfig.tsbuildinfo
 storage/
 .vercel
+.env*
+.env.vercel
