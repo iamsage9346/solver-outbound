@@ -25,7 +25,7 @@ export const DEFAULT_SETTINGS = {
     includeClCd: ["21", "31"],
   },
   geo: {
-    engines: ["anthropic", "openai", "perplexity", "gemini"] as string[],
+    engines: ["openai", "anthropic", "perplexity", "gemini"] as string[], // 키 없는 엔진은 자동 제외
     repeats: 3,
     weights: { mentionRate: 60, ownSource: 20, position: 20 },
     costCapKrw: 300_000,

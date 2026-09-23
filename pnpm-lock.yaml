@@ -327,6 +327,9 @@ importers:
       '@solver/shared':
         specifier: workspace:*
         version: link:../shared
+      openai:
+        specifier: ^6.0.0
+        version: 6.49.0(zod@4.6.5)
       zod:
         specifier: ^4.1.0
         version: 4.6.5
