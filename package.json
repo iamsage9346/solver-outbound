@@ -1,0 +1,41 @@
+{
+  "name": "solver-outbound",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.18.0",
+  "scripts": {
+    "dev": "pnpm --filter @solver/web dev",
+    "build": "pnpm --filter @solver/web build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "db:up": "docker compose up -d postgres",
+    "db:generate": "pnpm --filter @solver/db generate",
+    "db:migrate": "pnpm --filter @solver/db migrate",
+    "db:seed": "pnpm --filter @solver/db seed",
+    "db:studio": "pnpm --filter @solver/db studio",
+    "worker": "pnpm --filter @solver/worker dev",
+    "cli": "tsx scripts/cli.ts"
+  },
+  "dependencies": {
+    "@solver/db": "workspace:*",
+    "@solver/hira": "workspace:*",
+    "@solver/crawler": "workspace:*",
+    "@solver/geo": "workspace:*",
+    "@solver/mailer": "workspace:*",
+    "@solver/notify": "workspace:*",
+    "@solver/report": "workspace:*",
+    "@solver/shared": "workspace:*",
+    "commander": "^14.0.0",
+    "dotenv": "^17.2.0",
+    "@solver/llm": "workspace:*",
+    "@solver/pipeline": "workspace:*",
+    "csv-parse": "^6.0.0",
+    "drizzle-orm": "^0.44.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}

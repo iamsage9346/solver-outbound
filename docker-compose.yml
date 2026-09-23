@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: solver-outbound-pg
+    environment:
+      POSTGRES_USER: solver
+      POSTGRES_PASSWORD: solver
+      POSTGRES_DB: outbound
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+volumes:
+  pgdata:

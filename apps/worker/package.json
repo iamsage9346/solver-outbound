@@ -1,0 +1,33 @@
+{
+  "name": "@solver/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@solver/db": "workspace:*",
+    "@solver/hira": "workspace:*",
+    "@solver/crawler": "workspace:*",
+    "@solver/geo": "workspace:*",
+    "@solver/mailer": "workspace:*",
+    "@solver/notify": "workspace:*",
+    "@solver/report": "workspace:*",
+    "@solver/shared": "workspace:*",
+    "dotenv": "^17.2.0",
+    "pg-boss": "^10.3.0",
+    "@solver/llm": "workspace:*",
+    "@solver/pipeline": "workspace:*",
+    "drizzle-orm": "^0.44.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}

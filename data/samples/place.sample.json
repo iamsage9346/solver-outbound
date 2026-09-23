@@ -1,0 +1,49 @@
+[
+  {
+    "ykiho": "DRY000001",
+    "keywords": [
+      { "keyword": "강남구 정형외과", "rank": 7 },
+      { "keyword": "역삼동 정형외과", "rank": 3 },
+      { "keyword": "강남구 도수치료", "rank": null }
+    ],
+    "reviewCnt": 112,
+    "lastReviewAt": "2026-08-30",
+    "missing": ["주차", "예약 버튼"],
+    "placeUrl": "https://map.naver.com/p/entry/place/000001",
+    "competitors": [
+      { "name": "강남에이스정형외과", "placeRank": 1, "reviewCnt": 480 },
+      { "name": "역삼정형외과의원", "placeRank": 2, "reviewCnt": 310 },
+      { "name": "테헤란정형외과", "placeRank": 4, "reviewCnt": 150 }
+    ]
+  },
+  {
+    "ykiho": "DRY000002",
+    "keywords": [
+      { "keyword": "서초구 정형외과", "rank": 14 },
+      { "keyword": "서초동 정형외과", "rank": 9 },
+      { "keyword": "서초구 도수치료", "rank": null }
+    ],
+    "reviewCnt": 21,
+    "lastReviewAt": "2026-05-02",
+    "missing": ["진료시간", "사진", "소개글", "예약 버튼"],
+    "competitors": [
+      { "name": "서초바른정형외과", "placeRank": 1, "reviewCnt": 390 },
+      { "name": "교대정형외과의원", "placeRank": 2, "reviewCnt": 220 }
+    ]
+  },
+  {
+    "ykiho": "DRY000003",
+    "keywords": [
+      { "keyword": "성남시분당구 정형외과", "rank": 3 },
+      { "keyword": "정자동 정형외과", "rank": 1 },
+      { "keyword": "성남시분당구 도수치료", "rank": 5 }
+    ],
+    "reviewCnt": 260,
+    "lastReviewAt": "2026-09-15",
+    "missing": [],
+    "competitors": [
+      { "name": "분당서울정형외과", "placeRank": 1, "reviewCnt": 610 },
+      { "name": "정자정형외과의원", "placeRank": 2, "reviewCnt": 300 }
+    ]
+  }
+]
