@@ -20,10 +20,8 @@ export async function crawlLead(ctx: PipelineContext, lead: Lead): Promise<Crawl
   let homepage = lead.homepage;
   if (!homepage && !ctx.dryRun) {
     // 심평원에 없으면 네이버 지역검색으로 공식 홈페이지를 찾는다 (자동 발견 태그)
-    const guess = await guessHomepageFromNaver(lead.name, lead.address).catch((e) => {
-      ctx.log(lead.id, `홈페이지 탐색 실패: ${(e as Error).message}`);
-      return null;
-    });
+    // 탐색 자체가 실패(한도·인증·네트워크)하면 리드를 확정하지 않고 다음 라운드에 다시 시도한다
+    const guess = await guessHomepageFromNaver(lead.name, lead.address);
     if (guess) {
       homepage = guess.url;
       await ctx.db.update(leads).set({ homepage, homepageAutoFound: true }).where(eq(leads.id, lead.id));

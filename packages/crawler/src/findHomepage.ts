@@ -10,6 +10,15 @@ export interface HomepageGuess {
   address: string;
 }
 
+/** 네이버 검색 API는 초당 호출 제한이 있어 프로세스 전체에서 호출 간격을 둔다 (약 8 req/s). */
+let naverQueue: Promise<void> = Promise.resolve();
+const NAVER_MIN_GAP_MS = 130;
+function naverSlot(): Promise<void> {
+  const p = naverQueue.then(() => new Promise<void>((r) => setTimeout(r, NAVER_MIN_GAP_MS)));
+  naverQueue = p.catch(() => {});
+  return p;
+}
+
 const SKIP_HOSTS = /(naver\.com|naver\.me|daum\.net|kakao\.com|instagram\.com|facebook\.com|youtube\.com|blog\.me|tistory\.com|modoo\.at\/?$)/i;
 
 function norm(s: string) {
@@ -25,7 +34,15 @@ export async function guessHomepageFromNaver(name: string, address: string | nul
   const region = address?.split(/\s+/).slice(1, 3).join(" ") ?? "";
   const queries = [`${region} ${name}`.trim(), name];
   for (const q of queries) {
-    const res = await f(`https://openapi.naver.com/v1/search/local.json?query=${encodeURIComponent(q)}&display=5`, { headers: { "X-Naver-Client-Id": id, "X-Naver-Client-Secret": secret }, signal: AbortSignal.timeout(10_000) });
+    let res: Response | null = null;
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      await naverSlot();
+      res = await f(`https://openapi.naver.com/v1/search/local.json?query=${encodeURIComponent(q)}&display=5`, { headers: { "X-Naver-Client-Id": id, "X-Naver-Client-Secret": secret }, signal: AbortSignal.timeout(10_000) });
+      if (res.status !== 429) break;
+      // 초당 한도 초과: 점점 길게 기다렸다 재시도
+      await new Promise((r) => setTimeout(r, 1000 * attempt));
+    }
+    if (!res) continue;
     if (!res.ok) {
       if (res.status === 429) throw new Error("NAVER_RATE_LIMIT");
       if (res.status === 401 || res.status === 403) throw new Error(`NAVER_AUTH ${res.status}: ${(await res.text()).slice(0, 120)}`);
