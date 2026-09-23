@@ -52,10 +52,11 @@ export async function ask(prompt: string, opts: AskOptions = {}): Promise<string
       model,
       instructions: opts.system,
       input: prompt,
-      max_output_tokens: opts.maxTokens ?? 800,
-      // gpt-5 계열은 temperature를 받지 않으므로 지정된 경우에만 전달
-      ...(model.startsWith("gpt-5") ? {} : { temperature: opts.temperature ?? 0.3 }),
+      max_output_tokens: (opts.maxTokens ?? 800) + 256,
+      // gpt-5 계열: temperature 미지원, 추론 토큰이 출력 예산을 잠식하지 않도록 효과 최소
+      ...(model.startsWith("gpt-5") ? { reasoning: { effort: "minimal" as const } } : { temperature: opts.temperature ?? 0.3 }),
     });
+    if (res.status !== "completed" && !res.output_text) throw new Error(`OpenAI response ${res.status}: ${JSON.stringify(res.incomplete_details)}`);
     return res.output_text.trim();
   }
 
