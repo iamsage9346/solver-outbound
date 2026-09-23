@@ -3,7 +3,7 @@ import { z } from "zod";
 import { sleep } from "@solver/shared";
 
 const BASIS_URL = "https://apis.data.go.kr/B551182/hospInfoServicev2/getHospBasisList";
-const DETAIL_BASE = "https://apis.data.go.kr/B551182/MadmDtlInfoService2.7";
+const DETAIL_BASE = "https://apis.data.go.kr/B551182/MadmDtlInfoService2.8";
 
 const num = z.preprocess((v) => (v === "" || v == null ? null : Number(v)), z.number().nullable());
 const str = z.preprocess((v) => (v == null ? null : String(v)), z.string().nullable());
@@ -76,12 +76,13 @@ export class HiraClient {
 
   private async get(url: string, params: Record<string, string | number | undefined>) {
     const u = new URL(url);
-    // data.go.kr 인증키는 이미 URL 인코딩된 형태로 발급되는 경우가 많아 그대로 붙인다.
+    // data.go.kr 인증키: Encoding 키('%' 포함)는 그대로, Decoding 키('+', '/', '=' 포함)는 인코딩해서 붙인다.
+    const key = this.apiKey.includes("%") ? this.apiKey : encodeURIComponent(this.apiKey);
     const qs = Object.entries(params)
       .filter(([, v]) => v !== undefined && v !== "")
       .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
       .join("&");
-    const full = `${u.origin}${u.pathname}?serviceKey=${this.apiKey}&${qs}`;
+    const full = `${u.origin}${u.pathname}?serviceKey=${key}&${qs}`;
     const res = await this.fetchImpl(full, { headers: { accept: "application/json, application/xml" } });
     const text = await res.text();
     if (!res.ok) throw new Error(`HIRA ${res.status}: ${text.slice(0, 200)}`);
@@ -96,6 +97,9 @@ export class HiraClient {
     if (header && String(header.resultCode) !== "00") {
       throw new Error(`HIRA resultCode=${header.resultCode} ${header.resultMsg ?? ""}`);
     }
+    // data.go.kr 공통 오류 응답 (인증키 미등록·트래픽 초과 등)
+    const openApi = body?.OpenAPI_ServiceResponse?.cmmMsgHeader;
+    if (openApi) throw new Error(`data.go.kr ${openApi.returnReasonCode}: ${openApi.returnAuthMsg ?? openApi.errMsg ?? ""}`);
     return {
       items: toArray<any>(response?.body?.items?.item),
       totalCount: Number(response?.body?.totalCount ?? 0),
@@ -134,14 +138,14 @@ export class HiraClient {
   /** 의료기관별상세정보 — 진료과목·전문의 수 */
   async getDepartments(ykiho: string): Promise<DgsbjtItem[]> {
     if (this.dryRun) return [{ dgsbjtCd: "05", dgsbjtCdNm: "정형외과", dgsbjtPrSdrCnt: 2 }];
-    const { items } = await this.get(`${DETAIL_BASE}/getDgsbjtInfo2.7`, { ykiho, numOfRows: 50, _type: "json" });
+    const { items } = await this.get(`${DETAIL_BASE}/getDgsbjtInfo2.8`, { ykiho, numOfRows: 50, _type: "json" });
     return items.map((i: unknown) => DgsbjtItem.parse(i));
   }
 
   /** 진료시간 등 상세 (원본 그대로 반환) */
   async getDetail(ykiho: string): Promise<Record<string, unknown> | null> {
     if (this.dryRun) return { trmtMonStart: "0900", trmtMonEnd: "1800", lunchWeek: "1300~1400" };
-    const { items } = await this.get(`${DETAIL_BASE}/getDtlInfo2.7`, { ykiho, _type: "json" });
+    const { items } = await this.get(`${DETAIL_BASE}/getDtlInfo2.8`, { ykiho, _type: "json" });
     return items[0] ?? null;
   }
 }
