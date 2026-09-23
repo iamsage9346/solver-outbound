@@ -14,7 +14,8 @@
     "db:seed": "pnpm --filter @solver/db seed",
     "db:studio": "pnpm --filter @solver/db studio",
     "worker": "pnpm --filter @solver/worker dev",
-    "cli": "tsx scripts/cli.ts"
+    "cli": "tsx scripts/cli.ts",
+    "google:auth": "tsx scripts/google-auth.ts"
   },
   "dependencies": {
     "@solver/db": "workspace:*",
@@ -30,7 +31,8 @@
     "@solver/llm": "workspace:*",
     "@solver/pipeline": "workspace:*",
     "csv-parse": "^6.0.0",
-    "drizzle-orm": "^0.44.0"
+    "drizzle-orm": "^0.44.0",
+    "googleapis": "^160.0.0"
   },
   "devDependencies": {
     "@types/node": "^24",
