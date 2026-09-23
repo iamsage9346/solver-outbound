@@ -33,14 +33,22 @@ export async function guessHomepageFromNaver(name: string, address: string | nul
     }
     const body = (await res.json()) as { items?: { title: string; link: string; address: string; roadAddress: string }[] };
     const target = norm(name);
-    for (const it of body.items ?? []) {
-      const title = norm(it.title);
-      const nameOk = title.includes(target) || target.includes(title);
-      if (!nameOk) continue;
-      const link = (it.link ?? "").trim();
-      if (!/^https?:\/\//i.test(link) || SKIP_HOSTS.test(link)) continue;
-      return { url: link, source: "naver_local", matchedName: it.title.replace(/<[^>]+>/g, ""), address: it.roadAddress || it.address };
-    }
+    // 정확히 같은 이름 > 이름이 포함되되 군더더기가 짧은 것(지점·카페 등 제외). 링크 없는 항목은 건너뛴다.
+    const scored = (body.items ?? [])
+      .map((it) => {
+        const title = norm(it.title);
+        const link = (it.link ?? "").trim();
+        const linkOk = /^https?:\/\//i.test(link) && !SKIP_HOSTS.test(link);
+        let score = -1;
+        if (title === target) score = 3;
+        else if (title.startsWith(target) && title.length <= target.length + 3) score = 2;
+        else if (title.includes(target) && title.length <= target.length + 6) score = 1;
+        return { it, link, score: linkOk ? score : -1 };
+      })
+      .filter((c) => c.score > 0)
+      .sort((a, b) => b.score - a.score);
+    const best = scored[0];
+    if (best) return { url: best.link, source: "naver_local", matchedName: best.it.title.replace(/<[^>]+>/g, ""), address: best.it.roadAddress || best.it.address };
   }
   return null;
 }
