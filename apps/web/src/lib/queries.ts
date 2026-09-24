@@ -2,6 +2,7 @@ import "server-only";
 import { and, count, desc, eq, ilike, isNull, or, sql, type SQL } from "drizzle-orm";
 import { audits, contacts, crawlResults, events, leads, messages, notes, sequences, tasks } from "@solver/db";
 import { db } from "./db";
+import type { LeadStatus } from "@solver/shared";
 
 export interface LeadFilters {
   q?: string;
@@ -56,12 +57,13 @@ export async function listLeads(f: LeadFilters, page = 1, pageSize: number = PAG
 export type LeadRow = Awaited<ReturnType<typeof listLeads>>[number];
 
 export async function leadFacets() {
-  const [byStatus, byTier, bySido] = await Promise.all([
-    db.select({ k: leads.status, c: count() }).from(leads).groupBy(leads.status),
-    db.select({ k: sql<string>`coalesce(${leads.tierOverride}, ${leads.tier})`, c: count() }).from(leads).groupBy(sql`1`),
-    db.select({ k: leads.sido, c: count() }).from(leads).groupBy(leads.sido),
-  ]);
-  return { byStatus, byTier, bySido };
+  // 한 번의 왕복으로 세 facet을 가져온다 (서버리스에서는 쿼리 수가 곧 지연)
+  const rows = await db.execute<{ kind: string; k: string | null; c: number }>(sql`
+    select 'status' as kind, status::text as k, count(*)::int as c from leads group by status
+    union all select 'tier', coalesce(tier_override, tier)::text, count(*)::int from leads group by coalesce(tier_override, tier)
+    union all select 'sido', sido, count(*)::int from leads group by sido`);
+  const pick = (kind: string) => rows.filter((r) => r.kind === kind).map((r) => ({ k: r.k, c: Number(r.c) }));
+  return { byStatus: pick("status") as { k: LeadStatus; c: number }[], byTier: pick("tier"), bySido: pick("sido") };
 }
 
 export async function getLeadDetail(id: string) {
