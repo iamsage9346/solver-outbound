@@ -3,7 +3,20 @@ import type { CheerioAPI } from "cheerio";
 import { isPersonalEmail } from "@solver/shared";
 import type { EmailContext, ExtractedEmail, PageKind, SnsKey, TechSignals } from "./types";
 
-const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+// TLD 뒤에 글자가 이어지면(예: naver.comcopyright) 매치하지 않도록 경계를 둔다
+const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,10}(?![A-Za-z0-9])/g;
+
+/** 병원 컨택이 아닌 이메일: 호스팅·제작사·에러추적·예시·시스템 주소. DB 정리 SQL과 같은 규칙을 유지한다. */
+export const JUNK_EMAIL_DOMAIN_RE = /(^|\.)(wixpress\.com|wix\.com|sentry\.io|sentry-next\.io|gabia\.com|cafe24\.com|imweb\.me|godo\.co\.kr|makeshop\.co\.kr|sixshop\.com|creatorlink\.net|modoo\.at|domain\.com|example\.com|email\.com|mail\.com|yourdomain\.com|test\.com|spo\.go\.kr|kisa\.or\.kr|kopico\.go\.kr|privacy\.go\.kr|interactivy\.com|cenacle\.com|vizensoft\.com|mdtoday\.co\.kr|doctornow\.co\.kr|above\.com|budgestudios\.ca|bizmeka\.com|etoday\.co\.kr|solver\.kr|axsolver\.com|google\.com|facebook\.com|instagram\.com|kakao\.com|apple\.com|microsoft\.com|adobe\.com|w3\.org|00000\.co\.kr|midnight\.to)$/i;
+export const JUNK_EMAIL_LOCAL_RE = /^(test|tester|sample|example|user|username|name|email|mail|cid|noreply|no-reply|donotreply|do-not-reply|sentry|webmaster|hostmaster|postmaster|root|null|undefined|xxx+|your(name|email|mail)|abc|aaa+)$|^[0-9a-f]{20,}$|^\d{6,}$/i;
+
+export function isJunkEmail(value: string): boolean {
+  const [local = "", domain = ""] = value.toLowerCase().split("@");
+  if (!local || !domain) return true;
+  if (JUNK_EMAIL_DOMAIN_RE.test(domain) || JUNK_EMAIL_LOCAL_RE.test(local)) return true;
+  if (/\.(png|jpe?g|gif|svg|webp|js|css)$/i.test(domain)) return true;
+  return false;
+}
 
 /** 난독화 패턴을 표준 형태로 되돌린다. `[at]`, `(at)`, ` at `, `골뱅이`, `[dot]`, `(dot)`, ` dot ` */
 export function deobfuscate(text: string): { text: string; changed: boolean } {
@@ -27,6 +40,7 @@ export function extractEmails(html: string, pageUrl: string): ExtractedEmail[] {
     const value = raw.trim().toLowerCase().replace(/^mailto:/, "").split("?")[0] ?? "";
     if (!value || IMAGE_EXT.test(value) || !EMAIL_RE.test(value)) return;
     EMAIL_RE.lastIndex = 0;
+    if (isJunkEmail(value)) return;
     if (found.has(value)) return;
     found.set(value, { value, page: pageUrl, obfuscated, isPersonal: isPersonalEmail(value), context });
   };
@@ -46,8 +60,21 @@ export function extractEmails(html: string, pageUrl: string): ExtractedEmail[] {
   return [...found.values()];
 }
 
-const FORM_TEXT_RE = /문의|상담|제휴|예약|contact|inquiry/i;
-const FORM_URL_RE = /(form\.naver\.com|naver\.me|forms\.gle|docs\.google\.com\/forms|tally\.so|typeform\.com)/i;
+const FORM_TEXT_RE = /문의|상담|제휴|contact|inquiry|consult/i;
+/** 외부 폼 서비스만 허용. 그 외 외부 도메인 링크(호스팅사 고객센터, 포털, SNS)는 문의폼이 아니다. */
+const FORM_URL_RE = /(form\.naver\.com|forms\.gle|docs\.google\.com\/forms|tally\.so|typeform\.com|forms\.office\.com)/i;
+const FORM_PATH_RE = /(contact|inquiry|consult|qna|question|counsel|문의|상담)/i;
+export const MAX_FORMS_PER_SITE = 5;
+
+/** 같은 사이트인지 (www·m 서브도메인 무시) */
+export function sameSite(a: string, b: string): boolean {
+  const host = (u: string) => new URL(u).hostname.replace(/^(www|m)\./, "").toLowerCase();
+  try {
+    return host(a) === host(b);
+  } catch {
+    return false;
+  }
+}
 
 export function absolutize(href: string | undefined, base: string): string | null {
   if (!href) return null;
@@ -63,15 +90,21 @@ export function absolutize(href: string | undefined, base: string): string | nul
 }
 
 export function extractFormUrls($: CheerioAPI, base: string): string[] {
-  const out = new Set<string>();
+  const scored = new Map<string, number>();
   $("a[href]").each((_i, el) => {
     const href = $(el).attr("href");
     const abs = absolutize(href, base);
     if (!abs) return;
     const text = ($(el).text() + " " + ($(el).attr("title") ?? "") + " " + ($(el).find("img").attr("alt") ?? "")).trim();
-    if (FORM_URL_RE.test(abs) || (FORM_TEXT_RE.test(text) && !/tel:|mailto:/.test(href ?? ""))) out.add(abs);
+    let score = 0;
+    if (FORM_URL_RE.test(abs)) score = 3; // 외부 폼 서비스
+    else if (sameSite(abs, base)) {
+      if (FORM_PATH_RE.test(abs)) score = 2; // 자사 문의 페이지
+      else if (FORM_TEXT_RE.test(text)) score = 1; // 링크 텍스트만 문의
+    }
+    if (score > 0 && !scored.has(abs)) scored.set(abs, score);
   });
-  return [...out];
+  return [...scored.entries()].sort((a, b) => b[1] - a[1]).slice(0, MAX_FORMS_PER_SITE).map(([u]) => u);
 }
 
 const SNS_PATTERNS: [SnsKey, RegExp][] = [

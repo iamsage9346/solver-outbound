@@ -1,6 +1,7 @@
 import * as cheerio from "cheerio";
 import { DEFAULT_SETTINGS, detectEmailHarvestRefusal } from "@solver/shared";
 import {
+  MAX_FORMS_PER_SITE,
   absolutize,
   classifyPageLink,
   detectHarvestRefusalLinks,
@@ -201,7 +202,7 @@ export async function crawlSite(startUrl: string, opts: Partial<CrawlOptions> = 
   out.pagesVisited = visited.size;
   out.pages = pages;
   out.emails = out.harvestRefusal ? [] : [...emails.values()];
-  out.formUrls = [...formUrls];
+  out.formUrls = [...formUrls].slice(0, MAX_FORMS_PER_SITE);
   out.services = [...serviceSet];
   out.text = textParts.join("\n\n").slice(0, TEXT_LIMIT);
   return out;
