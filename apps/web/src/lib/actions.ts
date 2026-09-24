@@ -130,3 +130,12 @@ export async function updateAuditTopFixes(auditId: string, fixes: string[]) {
   revalidatePath("/audits");
   return { banned };
 }
+
+/** 우측 요약 패널용 경량 조회 (진단 점수·개선 포인트·최근 활동만) */
+export async function getLeadSummary(leadId: string) {
+  const { audits, events } = await import("@solver/db");
+  const { desc } = await import("drizzle-orm");
+  const [audit] = await db.select({ scores: audits.scores, topFixes: audits.topFixes, landingToken: audits.landingToken, approvedAt: audits.approvedAt }).from(audits).where(eq(audits.leadId, leadId)).orderBy(desc(audits.auditedAt)).limit(1);
+  const evs = await db.select({ id: events.id, type: events.type, payload: events.payload, occurredAt: events.occurredAt }).from(events).where(eq(events.leadId, leadId)).orderBy(desc(events.occurredAt)).limit(6);
+  return { audit: audit ?? null, events: evs.map((e) => ({ ...e, occurredAt: e.occurredAt.toISOString() })) };
+}

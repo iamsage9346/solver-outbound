@@ -1,38 +1,16 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
 import type { LeadRow } from "@/lib/queries";
 import { InlineSelect, InlineText, InlineCheck, STATUS_OPTIONS, TIER_OPTIONS } from "./inline";
 import { TierBadge } from "@/components/shell/badges";
 import { years } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-/** 리드 테이블: 행 높이 40px, j/k 이동 · Enter 열기 · t 태스크 */
-export function LeadsTable({ rows, selected }: { rows: LeadRow[]; selected: string | null }) {
-  const router = useRouter();
-  const sp = useSearchParams();
+/** 리드 테이블: 행 높이 40px. 선택은 부모(LeadsWorkspace)가 관리 */
+export function LeadsTable({ rows, selected, onSelect }: { rows: LeadRow[]; selected: string | null; onSelect: (id: string) => void }) {
   const ref = useRef<HTMLTableElement>(null);
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      const tag = (e.target as HTMLElement).tagName;
-      if (["INPUT", "SELECT", "TEXTAREA"].includes(tag)) return;
-      const idx = rows.findIndex((r) => r.lead.id === selected);
-      if (e.key === "j" || e.key === "k") {
-        const next = rows[Math.min(rows.length - 1, Math.max(0, idx + (e.key === "j" ? 1 : -1)))];
-        if (next) select(next.lead.id);
-      } else if (e.key === "Enter" && selected) router.push(`/leads/${selected}`);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  });
-
-  function select(id: string) {
-    const p = new URLSearchParams(sp.toString());
-    p.set("sel", id);
-    router.replace(`/leads?${p.toString()}`, { scroll: false });
-  }
+  const select = onSelect;
 
   if (rows.length === 0) return <div className="flex h-[240px] items-center justify-center text-[13px] text-muted-foreground">조건에 맞는 리드가 없습니다. 좌측 필터를 바꾸거나 CLI로 리스트업하세요.</div>;
 
