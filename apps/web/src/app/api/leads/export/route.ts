@@ -4,7 +4,7 @@ import { LEAD_STATUS_LABEL } from "@solver/shared";
 /** 구글시트용 CSV 내보내기 (PRD 4절 시트 컬럼 + 추가 컬럼) */
 export async function GET(req: Request) {
   const sp = new URL(req.url).searchParams;
-  const rows = await listLeads({ q: sp.get("q") ?? undefined, sido: sp.get("sido") ?? undefined, sggu: sp.get("sggu") ?? undefined, tier: sp.get("tier") ?? undefined, status: sp.get("status") ?? undefined, email: (sp.get("email") as "yes" | "no") ?? undefined });
+  const rows = await listLeads({ q: sp.get("q") ?? undefined, sido: sp.get("sido") ?? undefined, sggu: sp.get("sggu") ?? undefined, tier: sp.get("tier") ?? undefined, status: sp.get("status") ?? undefined, email: (sp.get("email") as "yes" | "no") ?? undefined }, 1, 0);
   const header = ["ykiho", "name", "sido", "sggu", "emd", "cl_name", "est_date", "doctor_cnt", "staff_est", "place_rank", "review_cnt", "geo_score", "homepage", "email", "phone", "form", "tier", "tier_override", "referral_possible", "referrer", "owner", "status", "next_action", "utm_source"];
   const esc = (v: unknown) => {
     const s = v == null ? "" : String(v);

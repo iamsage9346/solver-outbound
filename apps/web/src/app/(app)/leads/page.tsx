@@ -6,8 +6,10 @@ import { StatusBadge, TierBadge } from "@/components/shell/badges";
 import { LeadsTable } from "@/components/leads/table";
 import { CsvButtons } from "@/components/leads/csv";
 import { Button } from "@/components/ui/button";
-import { getLeadDetail, leadFacets, listLeads, type LeadFilters } from "@/lib/queries";
+import { countLeads, getLeadDetail, leadFacets, listLeads, PAGE_SIZE, type LeadFilters } from "@/lib/queries";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { fmtRel } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { EVENT_LABEL } from "@/lib/labels";
 
 export const dynamic = "force-dynamic";
@@ -17,12 +19,36 @@ export default async function LeadsPage({ searchParams }: PageProps<"/leads">) {
   const get = (k: string) => (typeof sp[k] === "string" && sp[k] ? (sp[k] as string) : undefined);
   const filters: LeadFilters = { q: get("q"), sido: get("sido"), sggu: get("sggu"), tier: get("tier"), status: get("status"), email: get("email") as LeadFilters["email"], cl: get("cl") };
   const sel = get("sel") ?? null;
-  const [rows, facets, detail] = await Promise.all([listLeads(filters), leadFacets(), sel ? getLeadDetail(sel) : null]);
+  const page = Math.max(1, Number(get("page") ?? 1) || 1);
+  const [rows, total, facets, detail] = await Promise.all([listLeads(filters, page), countLeads(filters), leadFacets(), sel ? getLeadDetail(sel) : null]);
   const query = new URLSearchParams(Object.entries(filters).filter(([, v]) => v) as [string, string][]).toString();
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const pageHref = (p: number) => `/leads?${query ? query + "&" : ""}page=${p}`;
+  const from = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const to = Math.min(total, page * PAGE_SIZE);
 
   return (
     <>
-      <Toolbar title="리드" subtitle={`${rows.length}곳`} actions={<CsvButtons query={query} />} />
+      <Toolbar
+        title="리드"
+        subtitle={`${total.toLocaleString()}곳`}
+        actions={
+          <>
+            <div className="mr-2 flex items-center gap-1 text-[13px] text-muted-foreground tabular">
+              <Link href={pageHref(Math.max(1, page - 1))} aria-disabled={page <= 1} className={cn("flex size-7 items-center justify-center rounded-md hover:bg-muted", page <= 1 && "pointer-events-none opacity-40")}>
+                <ChevronLeft className="size-4" strokeWidth={1.5} />
+              </Link>
+              <span>
+                {from.toLocaleString()}–{to.toLocaleString()} / {total.toLocaleString()}
+              </span>
+              <Link href={pageHref(Math.min(pages, page + 1))} aria-disabled={page >= pages} className={cn("flex size-7 items-center justify-center rounded-md hover:bg-muted", page >= pages && "pointer-events-none opacity-40")}>
+                <ChevronRight className="size-4" strokeWidth={1.5} />
+              </Link>
+            </div>
+            <CsvButtons query={query} />
+          </>
+        }
+      />
       <ThreePane
         left={<Filters facets={facets} filters={filters} />}
         center={

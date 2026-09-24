@@ -13,7 +13,9 @@ export interface LeadFilters {
   cl?: string;
 }
 
-export async function listLeads(f: LeadFilters) {
+export const PAGE_SIZE = 50;
+
+function leadWhere(f: LeadFilters): SQL | undefined {
   const where: SQL[] = [];
   if (f.q) where.push(or(ilike(leads.name, `%${f.q}%`), ilike(leads.address, `%${f.q}%`))!);
   if (f.sido) where.push(eq(leads.sido, f.sido));
@@ -24,7 +26,16 @@ export async function listLeads(f: LeadFilters) {
   const emailSub = sql`exists (select 1 from ${contacts} c where c.lead_id = "leads"."id" and c.type = 'email')`;
   if (f.email === "yes") where.push(emailSub);
   if (f.email === "no") where.push(sql`not ${emailSub}`);
+  return where.length ? and(...where) : undefined;
+}
 
+export async function countLeads(f: LeadFilters): Promise<number> {
+  const [row] = await db.select({ c: count() }).from(leads).where(leadWhere(f));
+  return Number(row?.c ?? 0);
+}
+
+/** page는 1부터. pageSize에 0을 주면 전체(CSV 내보내기용) */
+export async function listLeads(f: LeadFilters, page = 1, pageSize: number = PAGE_SIZE) {
   const rows = await db
     .select({
       lead: leads,
@@ -35,9 +46,10 @@ export async function listLeads(f: LeadFilters) {
       approved: sql<boolean>`exists (select 1 from ${audits} a where a.lead_id = "leads"."id" and a.approved_at is not null)`,
     })
     .from(leads)
-    .where(where.length ? and(...where) : undefined)
-    .orderBy(sql`case coalesce(${leads.tierOverride}, ${leads.tier}) when 'T1' then 0 when 'T2' then 1 when 'T3' then 2 else 3 end`, desc(leads.lastActivityAt), leads.name)
-    .limit(500);
+    .where(leadWhere(f))
+    .orderBy(sql`case coalesce(${leads.tierOverride}, ${leads.tier}) when 'T1' then 0 when 'T2' then 1 when 'T3' then 2 else 3 end`, desc(leads.lastActivityAt), leads.name, leads.id)
+    .limit(pageSize > 0 ? pageSize : 100000)
+    .offset(pageSize > 0 ? (Math.max(1, page) - 1) * pageSize : 0);
   return rows;
 }
 
